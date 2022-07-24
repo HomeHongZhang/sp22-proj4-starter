@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <omp.h>
+#include <math.h> // fabs()
 
 // Include SSE intrinsics
 #if defined(_MSC_VER)
@@ -49,6 +50,7 @@ void rand_matrix(matrix *result, unsigned int seed, double low, double high) {
  */
 double get(matrix *mat, int row, int col) {
     // Task 1.1 TODO
+    return *(mat->data + (row * mat->cols) + col);
 }
 
 /*
@@ -57,6 +59,7 @@ double get(matrix *mat, int row, int col) {
  */
 void set(matrix *mat, int row, int col, double val) {
     // Task 1.1 TODO
+    *(mat->data + (row * mat->cols) + col) = val;
 }
 
 /*
@@ -79,6 +82,23 @@ int allocate_matrix(matrix **mat, int rows, int cols) {
     // 6. Set the `ref_cnt` field to 1.
     // 7. Store the address of the allocated matrix struct at the location `mat` is pointing at.
     // 8. Return 0 upon success.
+    if (rows <= 0 || cols <= 0) return -1;  
+
+    struct matrix * new_matrix_ptr = (struct matrix *)malloc(sizeof(struct matrix));
+    if (new_matrix_ptr == NULL) return -2;
+
+    new_matrix_ptr->data = (double *)malloc(rows * cols * sizeof(double));
+    if (new_matrix_ptr->data == NULL) return -2;    
+    
+    for (int i = 0; i < rows * cols; i++) new_matrix_ptr->data[i] = 0.0;
+
+    new_matrix_ptr->rows = rows;
+    new_matrix_ptr->cols = cols;
+    new_matrix_ptr->parent = NULL;
+    new_matrix_ptr->ref_cnt = 1;
+
+    *mat = new_matrix_ptr;
+    return 0;
 }
 
 /*
@@ -92,6 +112,21 @@ void deallocate_matrix(matrix *mat) {
     // 1. If the matrix pointer `mat` is NULL, return.
     // 2. If `mat` has no parent: decrement its `ref_cnt` field by 1. If the `ref_cnt` field becomes 0, then free `mat` and its `data` field.
     // 3. Otherwise, recursively call `deallocate_matrix` on `mat`'s parent, then free `mat`.
+    if (mat == NULL) return;
+    if (mat->parent == NULL)
+    {
+        mat->ref_cnt -= 1;
+        if (mat->ref_cnt <= 0)
+        {
+            free(mat->data);
+            mat->data = NULL;
+            mat = NULL;
+        }
+    }
+    else
+    {
+        deallocate_matrix(mat->parent);
+    }
 }
 
 /*
@@ -117,6 +152,21 @@ int allocate_matrix_ref(matrix **mat, matrix *from, int offset, int rows, int co
     // 6. Increment the `ref_cnt` field of the `from` struct by 1.
     // 7. Store the address of the allocated matrix struct at the location `mat` is pointing at.
     // 8. Return 0 upon success.
+    if (rows <= 0 || cols <= 0) return -1;
+    
+    matrix *new_mat_ptr = (matrix *)malloc(sizeof(matrix));   
+    if (new_mat_ptr == NULL) return -2;
+
+    new_mat_ptr->data = from->data + offset;
+    new_mat_ptr->rows = rows;
+    new_mat_ptr->cols = cols;
+    new_mat_ptr->ref_cnt = 0;
+    new_mat_ptr->parent = from;
+    from->ref_cnt += 1;
+
+    *mat = new_mat_ptr;
+
+    return 0;
 }
 
 /*
@@ -124,6 +174,11 @@ int allocate_matrix_ref(matrix **mat, matrix *from, int offset, int rows, int co
  */
 void fill_matrix(matrix *mat, double val) {
     // Task 1.5 TODO
+    if (!mat) return;
+    for (int i = 0; i < mat->rows * mat->rows; i++)
+    {
+        mat->data[i] = val;
+    }
 }
 
 /*
@@ -133,6 +188,15 @@ void fill_matrix(matrix *mat, double val) {
  */
 int abs_matrix(matrix *result, matrix *mat) {
     // Task 1.5 TODO
+    if (!result || !mat) return -1;
+
+    const int row = mat->rows;
+    const int col = mat->cols;
+
+    for (int i = 0; i < row * col; i++) 
+        result->data[i] = fabs(mat->data[i]);
+
+    return 0;
 }
 
 /*
@@ -143,6 +207,14 @@ int abs_matrix(matrix *result, matrix *mat) {
  */
 int neg_matrix(matrix *result, matrix *mat) {
     // Task 1.5 TODO
+    if (!result || !mat) return -1;
+
+    for (int i = 0; i < mat->rows * mat->cols; i++)
+    {
+        result->data[i] = mat->data[i] * (-1);
+    }
+
+    return 0;
 }
 
 /*
@@ -153,6 +225,11 @@ int neg_matrix(matrix *result, matrix *mat) {
  */
 int add_matrix(matrix *result, matrix *mat1, matrix *mat2) {
     // Task 1.5 TODO
+    if (!result || !mat1 || !mat2) return -1;
+    const int rows = mat1->rows;
+    const int cols = mat1->cols;
+    for (int i = 0; i < rows * cols; i++) result->data[i] = mat1->data[i] + mat2->data[i];
+    return 0;
 }
 
 /*
@@ -164,6 +241,11 @@ int add_matrix(matrix *result, matrix *mat1, matrix *mat2) {
  */
 int sub_matrix(matrix *result, matrix *mat1, matrix *mat2) {
     // Task 1.5 TODO
+    if (!result || !mat1 || !mat2) return -1;
+    const int rows = mat1->rows;
+    const int cols = mat1->cols;
+    for (int i = 0; i < rows * cols; i++) result->data[i] = mat1->data[i] - mat2->data[i];
+    return 0;
 }
 
 /*
@@ -175,6 +257,27 @@ int sub_matrix(matrix *result, matrix *mat1, matrix *mat2) {
  */
 int mul_matrix(matrix *result, matrix *mat1, matrix *mat2) {
     // Task 1.6 TODO
+    if (!result || !mat1 || !mat2) return -1;
+    if (mat1->cols != mat2->rows) return -2;
+    
+    const int r = mat1->rows;
+    const int c = mat2->cols;
+    const int n = mat1->cols;
+
+    for (int i = 0; i < r; i++)
+    {
+        for (int j = 0; j < c; j++)
+        {
+            int ans = 0;
+            for (int k = 0; k < n; k++)
+            {
+                ans += mat1->data[i * n + k] * mat2->data[k * c + j]; 
+            }
+            result->data[i * c + j] = ans;
+        }    
+    }
+    
+    return 0;
 }
 
 /*
@@ -186,4 +289,35 @@ int mul_matrix(matrix *result, matrix *mat1, matrix *mat2) {
  */
 int pow_matrix(matrix *result, matrix *mat, int pow) {
     // Task 1.6 TODO
+    if (!result || !mat) return -1;
+    if (mat->rows != mat->cols) return -2;    
+    if (pow < 0) return -3;
+
+    const int N = mat->rows;
+
+    if (pow == 1) 
+    {        
+        for (int i = 0; i < N * N; i++)
+        {
+            result->data[i] = mat->data[i];
+        }
+        return 0;
+    }    
+
+    matrix * all_zero_mat_ptr = NULL;
+    allocate_matrix(&all_zero_mat_ptr, mat->rows, mat->cols);
+    fill_matrix(all_zero_mat_ptr, 0.0);
+
+    matrix * tmp_mat_ptr = NULL;
+    allocate_matrix(&tmp_mat_ptr, mat->rows, mat->cols);
+    add_matrix(tmp_mat_ptr, mat, all_zero_mat_ptr);
+
+    fill_matrix(result, 0.0);
+    for (int i = 2; i <= pow; i++)
+    {
+        mul_matrix(result, tmp_mat_ptr, mat);  
+        add_matrix(tmp_mat_ptr, result, all_zero_mat_ptr);
+    }
+
+    return 0;
 }
