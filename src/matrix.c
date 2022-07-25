@@ -120,12 +120,15 @@ void deallocate_matrix(matrix *mat) {
         {
             free(mat->data);
             mat->data = NULL;
+            free(mat);
             mat = NULL;
         }
     }
     else
     {
         deallocate_matrix(mat->parent);
+        free(mat);
+        mat = NULL;
     }
 }
 
@@ -318,6 +321,9 @@ int pow_matrix(matrix *result, matrix *mat, int pow) {
         mul_matrix(result, tmp_mat_ptr, mat);  
         add_matrix(tmp_mat_ptr, result, all_zero_mat_ptr);
     }
+
+    deallocate_matrix(all_zero_mat_ptr);
+    deallocate_matrix(tmp_mat_ptr);
 
     return 0;
 }
